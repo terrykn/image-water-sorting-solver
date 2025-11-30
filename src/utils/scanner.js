@@ -6,7 +6,7 @@ const THRESHOLD = 180; // Brightness threshold for tube borders
 const MIN_AREA = 500;  // Min pixel area to be considered a tube
 
 // STRICT MATCHING CONFIGURATION
-const MAX_COLOR_DIST = 100; // Tolerance: Lower = Stricter (20 is very strict)
+const MAX_COLOR_DIST = 200; // Tolerance: Lower = Stricter (20 is very strict)
 
 // The specific colors allowed
 const RAW_PALETTE = [
