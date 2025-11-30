@@ -1,11 +1,40 @@
-// Constants for detection
-const THRESHOLD = 180; // Brightness threshold
-const MIN_AREA = 500;  // Min pixel area to be a tube
+// ==========================================
+// CONFIGURATION & CONSTANTS
+// ==========================================
 
-// Helper: Convert RGB to Hex for easier logic handling
-const rgbToHex = (r, g, b) => {
-  return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+const THRESHOLD = 180; // Brightness threshold for tube borders
+const MIN_AREA = 500;  // Min pixel area to be considered a tube
+
+// STRICT MATCHING CONFIGURATION
+const MAX_COLOR_DIST = 20; // Tolerance: Lower = Stricter (20 is very strict)
+
+// The specific colors allowed
+const RAW_PALETTE = [
+  "#fdf35b", // Yellow
+  "#6ad9fa", // Light Blue
+  "#f54cff", // Magenta
+  "#ffa442", // Orange
+  "#5c5cf7", // Blue/Indigo
+  "#78ff65", // Green
+  "#fe4e51"  // Red
+];
+
+// Helper: Hex to RGB Array
+const hexToRgb = (hex) => {
+  const bigint = parseInt(hex.slice(1), 16);
+  return [(bigint >> 16) & 255, (bigint >> 8) & 255, bigint & 255];
 };
+
+// Pre-calculate target RGBs for performance
+const TARGET_COLORS = RAW_PALETTE.map((hex, index) => ({
+  id: index,
+  hex: hex,
+  rgb: hexToRgb(hex)
+}));
+
+// ==========================================
+// UTILITY FUNCTIONS
+// ==========================================
 
 // Euclidean distance for color similarity
 const colorDist = (c1, c2) => {
@@ -15,13 +44,44 @@ const colorDist = (c1, c2) => {
   return Math.sqrt(r * r + g * g + b * b);
 };
 
+// Find the closest color from our specific palette
+const findClosestColor = (r, g, b) => {
+  let closestIndex = -1;
+  let minDistance = 99999;
+
+  for (let i = 0; i < TARGET_COLORS.length; i++) {
+    const target = TARGET_COLORS[i];
+    const dist = colorDist([r, g, b], target.rgb);
+
+    if (dist < minDistance) {
+      minDistance = dist;
+      closestIndex = i;
+    }
+  }
+
+  // Only return the match if it is "very very extremely close"
+  if (minDistance <= MAX_COLOR_DIST) {
+    return closestIndex;
+  }
+  
+  return -1; // No valid color found (noise or empty)
+};
+
+// ==========================================
+// MAIN SCANNING LOGIC
+// ==========================================
+
 export const scanImage = (file) => {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.src = URL.createObjectURL(file);
+    
     img.onload = () => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
+      
+      // Handle high-res displays/scaling issues if necessary, 
+      // but standard width/height usually works for raw image analysis
       canvas.width = img.width;
       canvas.height = img.height;
       ctx.drawImage(img, 0, 0);
@@ -31,19 +91,16 @@ export const scanImage = (file) => {
       const width = canvas.width;
       const height = canvas.height;
 
-      // 1. Simple Thresholding & Flood Fill to find Contours
-      // We create a visited array to mark pixels belonging to tubes
+      // 1. Find Contours (Tube detection)
       const visited = new Int8Array(width * height);
       const contours = [];
 
-      for (let y = 0; y < height; y += 5) { // Skip steps for speed
+      for (let y = 0; y < height; y += 5) {
         for (let x = 0; x < width; x += 5) {
           const idx = (y * width + x) * 4;
           const brightness = (data[idx] + data[idx+1] + data[idx+2]) / 3;
 
-          // If bright pixel (tube border/liquid) and not visited
           if (brightness > THRESHOLD && !visited[y * width + x]) {
-            // Perform Flood Fill to get bounding box
             const stack = [[x, y]];
             let minX = x, maxX = x, minY = y, maxY = y;
             let count = 0;
@@ -54,7 +111,6 @@ export const scanImage = (file) => {
               
               if (cx < 0 || cx >= width || cy < 0 || cy >= height || visited[cIdx]) continue;
               
-              // check threshold
               const pIdx = (cy * width + cx) * 4;
               const b = (data[pIdx] + data[pIdx+1] + data[pIdx+2]) / 3;
               
@@ -70,7 +126,6 @@ export const scanImage = (file) => {
               }
             }
 
-            // If blob is big enough, it's a tube
             if (count > MIN_AREA) {
               contours.push({ x: minX, y: minY, w: maxX - minX, h: maxY - minY });
             }
@@ -79,26 +134,23 @@ export const scanImage = (file) => {
       }
 
       // 2. Sort Contours (Top-Left to Bottom-Right)
-      // Similar to Python's _compare_centers
       contours.sort((a, b) => {
         if (Math.abs(a.y - b.y) > 50) return a.y - b.y;
         return a.x - b.x;
       });
 
-      // 3. Extract Colors
+      // 3. Extract and Map Colors Immediately
       const tubes = [];
+      
       contours.forEach(cnt => {
-        // Sample down the center of the bounding box
         const centerX = Math.floor(cnt.x + cnt.w / 2);
         const startY = cnt.y;
-        const endY = cnt.y + cnt.h;
-        const segmentHeight = Math.floor(cnt.h / 4); // Assume 4 slots
+        const segmentHeight = Math.floor(cnt.h / 4); 
 
         const tubeColors = [];
         
-        // We take 4 samples
+        // Scan 4 slots per tube
         for(let i = 0; i < 4; i++) {
-          // Adjust sampleY to avoid the very top/bottom of segments
           const sampleY = Math.floor(startY + (segmentHeight * i) + (segmentHeight * 0.5));
           if (sampleY >= height) continue;
 
@@ -107,41 +159,30 @@ export const scanImage = (file) => {
           const g = data[idx+1];
           const b = data[idx+2];
 
-          // Check if "suspicious" (black/dark background inside tube -> empty slot)
+          // Check if it's the black background (empty space)
           if (r < 45 && g < 45 && b < 45) {
-             // Empty, don't add
+             // It's empty/black, ignore
           } else {
-             tubeColors.push([r, g, b]);
+             // Check against our STRICT Palette
+             const colorId = findClosestColor(r, g, b);
+             if (colorId !== -1) {
+                 tubeColors.push(colorId);
+             }
           }
         }
-        // In the game, data is stored Top->Bottom.
-        // If the tube isn't full, the empty space is usually at the top.
-        // However, standard representation usually just lists colors present.
         tubes.push(tubeColors);
       });
 
-      // 4. Cluster Colors (Map RGB -> 0,1,2,3...)
-      const colorMap = []; // Array of [r,g,b]
-      const simplifiedTubes = tubes.map(tube => {
-        return tube.map(color => {
-          // Find existing close color
-          let matchIndex = colorMap.findIndex(ref => colorDist(ref, color) < 30);
-          if (matchIndex === -1) {
-            colorMap.push(color);
-            matchIndex = colorMap.length - 1;
-          }
-          return matchIndex;
-        });
-      });
-      
-      // Add 2 empty tubes (standard game rules usually allow 2 spares)
-      simplifiedTubes.push([], []);
+      // Add 2 empty tubes (Standard game rules)
+      tubes.push([], []);
 
       resolve({ 
-        tubes: simplifiedTubes, 
-        colorMap: colorMap.map(c => `rgb(${c[0]},${c[1]},${c[2]})`) 
+        tubes: tubes, 
+        // Return the palette formatted as CSS strings so the UI can render them
+        colorMap: RAW_PALETTE 
       });
     };
+    
     img.onerror = reject;
   });
 };
