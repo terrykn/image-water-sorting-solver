@@ -1,14 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { scanImage } from './utils/scanner';
 import { solveLevel } from './utils/solver';
 import Tube from './components/Tube';
 import './App.css';
 
 function App() {
-  const [level, setLevel] = useState(null); // { tubes, colorMap }
+  const [level, setLevel] = useState(null);
   const [solution, setSolution] = useState(null);
   const [currentStep, setCurrentStep] = useState(0);
-  const [status, setStatus] = useState('idle'); // idle, scanning, solving, ready
+  const [status, setStatus] = useState('idle');
 
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
@@ -32,7 +32,6 @@ function App() {
     if (!level) return;
     setStatus('solving');
     
-    // Allow UI to render before freezing with calculation
     setTimeout(() => {
       const result = solveLevel(level.tubes);
       if (result.success) {
@@ -45,10 +44,8 @@ function App() {
     }, 100);
   };
 
-  // Compute the state of tubes at the current step
   const getCurrentState = () => {
     if (!level) return [];
-    // Deep copy initial state
     let currentState = JSON.parse(JSON.stringify(level.tubes));
     
     if (solution) {

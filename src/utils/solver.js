@@ -1,6 +1,5 @@
 import { PriorityQueue } from "./priorityQueue";
 
-// Heuristic: Lower is better
 const calculateHeuristic = (state) => {
   let score = 0;
   for (const tube of state) {
@@ -25,17 +24,15 @@ const isGoal = (state) => {
 const getSignature = (state) => JSON.stringify(state);
 
 export const solveLevel = (initialState) => {
-  // Min-Heap based on heuristic cost
   const queue = new PriorityQueue((a, b) => a.cost < b.cost);
   
-  // Node structure: { cost, state, parent, move: {from, to} }
   queue.push({ cost: 0, state: initialState, parent: null, move: null });
   
   const visited = new Set();
   visited.add(getSignature(initialState));
 
   let iterations = 0;
-  const MAX_ITERATIONS = 10000; // Safety break
+  const MAX_ITERATIONS = 15000;
 
   while (!queue.isEmpty()) {
     iterations++;
@@ -44,7 +41,6 @@ export const solveLevel = (initialState) => {
     const current = queue.pop();
     
     if (isGoal(current.state)) {
-      // Reconstruct path
       const path = [];
       let curr = current;
       while (curr.move) {
@@ -56,7 +52,6 @@ export const solveLevel = (initialState) => {
 
     const { state } = current;
 
-    // Generate moves
     for (let i = 0; i < state.length; i++) {
       for (let j = 0; j < state.length; j++) {
         if (i === j) continue;
@@ -64,13 +59,11 @@ export const solveLevel = (initialState) => {
         const src = state[i];
         const dest = state[j];
 
-        // Rules: Src not empty, Dest not full, Colors match (or dest empty)
         if (src.length > 0 && dest.length < 4) {
           if (dest.length === 0 || src[0] === dest[0]) {
-            // Create new state
             const newState = state.map(t => [...t]);
-            const color = newState[i].shift(); // Take from top (0 index)
-            newState[j].unshift(color);      // Put on top (0 index)
+            const color = newState[i].shift();
+            newState[j].unshift(color);
 
             const sig = getSignature(newState);
             if (!visited.has(sig)) {

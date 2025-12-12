@@ -1,28 +1,28 @@
 export class PriorityQueue {
   constructor(comparator = (a, b) => a > b) {
-    self._heap = [];
-    self._comparator = comparator;
+    this._heap = [];
+    this._comparator = comparator;
   }
-  size() { return self._heap.length; }
-  isEmpty() { return self.size() === 0; }
-  peek() { return self._heap[0]; }
+  size() { return this._heap.length; }
+  isEmpty() { return this.size() === 0; }
+  peek() { return this._heap[0]; }
   
   push(...values) {
     values.forEach(value => {
-      self._heap.push(value);
-      self._siftUp();
+      this._heap.push(value);
+      this._siftUp();
     });
-    return self.size();
+    return this.size();
   }
 
   pop() {
-    const poppedValue = self.peek();
-    const bottom = self.size() - 1;
+    const poppedValue = this.peek();
+    const bottom = this.size() - 1;
     if (bottom > 0) {
-      self._swap(0, bottom);
+      this._swap(0, bottom);
     }
-    self._heap.pop();
-    self._siftDown();
+    this._heap.pop();
+    this._siftDown();
     return poppedValue;
   }
 
@@ -31,31 +31,31 @@ export class PriorityQueue {
   _right(idx) { return (idx + 1) << 1; }
 
   _greater(i, j) {
-    return self._comparator(self._heap[i], self._heap[j]);
+    return this._comparator(this._heap[i], this._heap[j]);
   }
 
   _swap(i, j) {
-    [self._heap[i], self._heap[j]] = [self._heap[j], self._heap[i]];
+    [this._heap[i], this._heap[j]] = [this._heap[j], this._heap[i]];
   }
 
   _siftUp() {
-    let node = self.size() - 1;
-    while (node > 0 && self._greater(node, self._parent(node))) {
-      self._swap(node, self._parent(node));
-      node = self._parent(node);
+    let node = this.size() - 1;
+    while (node > 0 && this._greater(node, this._parent(node))) {
+      this._swap(node, this._parent(node));
+      node = this._parent(node);
     }
   }
 
   _siftDown() {
     let node = 0;
     while (
-      (self._left(node) < self.size() && self._greater(self._left(node), node)) ||
-      (self._right(node) < self.size() && self._greater(self._right(node), node))
+      (this._left(node) < this.size() && this._greater(this._left(node), node)) ||
+      (this._right(node) < this.size() && this._greater(this._right(node), node))
     ) {
-      let maxChild = (self._right(node) < self.size() && self._greater(self._right(node), self._left(node))) 
-        ? self._right(node) 
-        : self._left(node);
-      self._swap(node, maxChild);
+      let maxChild = (this._right(node) < this.size() && this._greater(this._right(node), this._left(node))) 
+        ? this._right(node) 
+        : this._left(node);
+      this._swap(node, maxChild);
       node = maxChild;
     }
   }

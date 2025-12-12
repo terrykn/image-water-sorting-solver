@@ -1,188 +1,165 @@
-// ==========================================
-// CONFIGURATION & CONSTANTS
-// ==========================================
+/* ------------------------------------------------------
+   CONFIGURATION: HARDCODED POSITIONS
+   ------------------------------------------------------ */
+// The X coordinates for the 4 columns
+const COLS_X = [170, 444, 726, 1003];
 
-const THRESHOLD = 180; // Brightness threshold for tube borders
-const MIN_AREA = 500;  // Min pixel area to be considered a tube
+// The Y starting coordinates for the 3 rows (Top to Bottom visually)
+// We need to keep this order for scanning simplicity:
+// Index 0: Row 3 (Visual Top)
+// Index 1: Row 2 (Visual Mid)
+// Index 2: Row 1 (Visual Bottom)
+const ROWS_Y = [635, 1125, 1635]; 
 
-// STRICT MATCHING CONFIGURATION
-const MAX_COLOR_DIST = 200; // Tolerance: Lower = Stricter (20 is very strict)
+// The offsets from the top of the tube to each of the 4 slots
+const SLOT_OFFSETS = [0, 83, 166, 250];
 
-// The specific colors allowed
-const RAW_PALETTE = [
-  "#fdf35b", // Yellow
-  "#6ad9fa", // Light Blue
-  "#f54cff", // Magenta
-  "#ffa442", // Orange
-  "#5c5cf7", // Blue/Indigo
-  "#78ff65", // Green
-  "#fe4e51"  // Red
+// YOUR ORIGINAL COLORS (The 'colorMap' for the App)
+const LIQUID_COLORS = [
+  { id: 0, hex: "#ffdd52", rgb: [255, 221, 82] },
+  { id: 1, hex: "#69d7ff", rgb: [105, 215, 255] },
+  { id: 2, hex: "#f34cff", rgb: [243, 76, 255] },
+  { id: 3, hex: "#ffa540", rgb: [255, 165, 64] },
+  { id: 4, hex: "#5d5bff", rgb: [93, 91, 255] },
+  { id: 5, hex: "#77ff64", rgb: [119, 255, 100] },
+  { id: 6, hex: "#fe4f4d", rgb: [254, 79, 77] }
 ];
 
-// Helper: Hex to RGB Array
-const hexToRgb = (hex) => {
-  const bigint = parseInt(hex.slice(1), 16);
-  return [(bigint >> 16) & 255, (bigint >> 8) & 255, bigint & 255];
-};
+// Colors to explicitly ignore (backgrounds, shadows)
+const AVOID_COLORS = [
+  [113, 193, 241],
+  [53, 97, 171], 
+  [17, 29, 50]   
+];
 
-// Pre-calculate target RGBs for performance
-const TARGET_COLORS = RAW_PALETTE.map((hex, index) => ({
-  id: index,
-  hex: hex,
-  rgb: hexToRgb(hex)
-}));
+/* ------------------------------------------------------
+   HELPER FUNCTIONS
+   ------------------------------------------------------ */
 
-// ==========================================
-// UTILITY FUNCTIONS
-// ==========================================
-
-// Euclidean distance for color similarity
 const colorDist = (c1, c2) => {
-  const r = c1[0] - c2[0];
-  const g = c1[1] - c2[1];
-  const b = c1[2] - c2[2];
-  return Math.sqrt(r * r + g * g + b * b);
+  return Math.sqrt(
+    Math.pow(c1[0] - c2[0], 2) +
+    Math.pow(c1[1] - c2[1], 2) +
+    Math.pow(c1[2] - c2[2], 2)
+  );
 };
 
-// Find the closest color from our specific palette
-const findClosestColor = (r, g, b) => {
-  let closestIndex = -1;
-  let minDistance = 99999;
+const classifyPixel = (r, g, b) => {
+  const pixel = [r, g, b];
+  
+  // 1. Check AVOID list (Backgrounds)
+  // This helps ensure empty tubes aren't falsely marked as containing color
+  for (let avoid of AVOID_COLORS) {
+    if (colorDist(pixel, avoid) < 20) return -1;
+  }
 
-  for (let i = 0; i < TARGET_COLORS.length; i++) {
-    const target = TARGET_COLORS[i];
-    const dist = colorDist([r, g, b], target.rgb);
+  // 2. Find closest LIQUID color
+  let bestDist = 40; 
+  let bestId = -1;
 
-    if (dist < minDistance) {
-      minDistance = dist;
-      closestIndex = i;
+  for (let color of LIQUID_COLORS) {
+    const dist = colorDist(pixel, color.rgb);
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestId = color.id;
     }
   }
 
-  // Only return the match if it is "very very extremely close"
-  if (minDistance <= MAX_COLOR_DIST) {
-    return closestIndex;
-  }
-  
-  return -1; // No valid color found (noise or empty)
+  return bestId;
 };
 
-// ==========================================
-// MAIN SCANNING LOGIC
-// ==========================================
+/* ------------------------------------------------------
+   MAIN SCANNER
+   ------------------------------------------------------ */
+
+// We define a Tube object to hold its coordinates and detected colors 
+// before sorting them for the solver.
+class TubeLocation {
+    constructor(x, y, colors) {
+        this.x = x;
+        this.y = y;
+        this.colors = colors;
+    }
+}
+
 
 export const scanImage = (file) => {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.src = URL.createObjectURL(file);
-    
+
     img.onload = () => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
-      
-      // Handle high-res displays/scaling issues if necessary, 
-      // but standard width/height usually works for raw image analysis
       canvas.width = img.width;
       canvas.height = img.height;
       ctx.drawImage(img, 0, 0);
 
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const data = imageData.data;
-      const width = canvas.width;
-      const height = canvas.height;
+      const w = canvas.width;
 
-      // 1. Find Contours (Tube detection)
-      const visited = new Int8Array(width * height);
-      const contours = [];
+      const detectedTubes = [];
 
-      for (let y = 0; y < height; y += 5) {
-        for (let x = 0; x < width; x += 5) {
-          const idx = (y * width + x) * 4;
-          const brightness = (data[idx] + data[idx+1] + data[idx+2]) / 3;
+      // Iterate through Rows (Visually Top to Bottom) to find all tubes
+      for (let r = 0; r < ROWS_Y.length; r++) {
+        const rowY = ROWS_Y[r];
+        
+        // Iterate through Columns (Left to Right)
+        for (let c = 0; c < COLS_X.length; c++) {
+          const colX = COLS_X[c];
+          
+          const tubeColors = [];
+          let isEmptyTube = true;
 
-          if (brightness > THRESHOLD && !visited[y * width + x]) {
-            const stack = [[x, y]];
-            let minX = x, maxX = x, minY = y, maxY = y;
-            let count = 0;
+          // Scan the 4 slots in this tube (Top to Bottom)
+          for (let s = 0; s < SLOT_OFFSETS.length; s++) {
+            const scanX = colX;
+            const scanY = rowY + SLOT_OFFSETS[s];
 
-            while(stack.length > 0) {
-              const [cx, cy] = stack.pop();
-              const cIdx = cy * width + cx;
-              
-              if (cx < 0 || cx >= width || cy < 0 || cy >= height || visited[cIdx]) continue;
-              
-              const pIdx = (cy * width + cx) * 4;
-              const b = (data[pIdx] + data[pIdx+1] + data[pIdx+2]) / 3;
-              
-              if (b > THRESHOLD) {
-                visited[cIdx] = 1;
-                count++;
-                if (cx < minX) minX = cx;
-                if (cx > maxX) maxX = cx;
-                if (cy < minY) minY = cy;
-                if (cy > maxY) maxY = cy;
+            // Get Pixel Data
+            const idx = (scanY * w + scanX) * 4;
+            const rVal = data[idx];
+            const gVal = data[idx + 1];
+            const bVal = data[idx + 2];
 
-                stack.push([cx+1, cy], [cx-1, cy], [cx, cy+1], [cx, cy-1]);
-              }
-            }
+            const colorId = classifyPixel(rVal, gVal, bVal);
 
-            if (count > MIN_AREA) {
-              contours.push({ x: minX, y: minY, w: maxX - minX, h: maxY - minY });
+            if (colorId !== -1) {
+              tubeColors.push(colorId);
+              isEmptyTube = false;
             }
           }
+
+          // Store the tube's location (Top-Left point of the tube area) and colors
+          // The order of colors in tubeColors is already Top-to-Bottom, as required by the solver logic.
+          detectedTubes.push(new TubeLocation(colX, rowY, tubeColors));
         }
       }
 
-      // 2. Sort Contours (Top-Left to Bottom-Right)
-      contours.sort((a, b) => {
-        if (Math.abs(a.y - b.y) > 50) return a.y - b.y;
+      // --- CRITICAL STEP: SORTING FOR THE SOLVER ---
+      // The solver needs the tubes indexed R1C1, R1C2, R2C1, R2C2, etc.
+      // Your requirement: Row 1 (Bottom) -> Row 3 (Top), Left to Right.
+      // Since higher Y means lower on the screen, we sort by Y descending, then X ascending.
+
+      detectedTubes.sort((a, b) => {
+        // 1. Sort by Y-coordinate in DESCENDING order (Bottom row first, Top row last)
+        if (a.y !== b.y) {
+          return b.y - a.y; 
+        }
+        // 2. If on the same row, sort by X-coordinate in ASCENDING order (Left to Right)
         return a.x - b.x;
       });
-
-      // 3. Extract and Map Colors Immediately
-      const tubes = [];
       
-      contours.forEach(cnt => {
-        const centerX = Math.floor(cnt.x + cnt.w / 2);
-        const startY = cnt.y;
-        const segmentHeight = Math.floor(cnt.h / 4); 
+      // Extract just the color arrays for the final solver input
+      const finalTubesState = detectedTubes.map(t => t.colors);
 
-        const tubeColors = [];
-        
-        // Scan 4 slots per tube
-        for(let i = 0; i < 4; i++) {
-          const sampleY = Math.floor(startY + (segmentHeight * i) + (segmentHeight * 0.5));
-          if (sampleY >= height) continue;
-
-          const idx = (sampleY * width + centerX) * 4;
-          const r = data[idx];
-          const g = data[idx+1];
-          const b = data[idx+2];
-
-          // Check if it's the black background (empty space)
-          if (r < 45 && g < 45 && b < 45) {
-             // It's empty/black, ignore
-          } else {
-             // Check against our STRICT Palette
-             const colorId = findClosestColor(r, g, b);
-             if (colorId !== -1) {
-                 tubeColors.push(colorId);
-             }
-          }
-        }
-        tubes.push(tubeColors);
-      });
-
-      // Add 2 empty tubes (Standard game rules)
-      tubes.push([], []);
-
-      resolve({ 
-        tubes: tubes, 
-        // Return the palette formatted as CSS strings so the UI can render them
-        colorMap: RAW_PALETTE 
+      resolve({
+        tubes: finalTubesState, // Passed to solveLevel
+        colorMap: LIQUID_COLORS.map(c => c.hex) // Passed to App.jsx for display
       });
     };
-    
+
     img.onerror = reject;
   });
 };

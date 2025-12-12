@@ -1,11 +1,6 @@
 import React from 'react';
 
 const Tube = ({ colors, colorMap, active }) => {
-  // Pad with empty spots for visualization (4 max)
-  const slots = [null, null, null, null];
-  
-  // Fill slots from bottom up visually, but data is Top->Bottom (0 is Top)
-  // CSS Flex-col-reverse handles visual stacking, so we map directly.
   const displayColors = [...colors].reverse(); 
 
   return (
@@ -18,7 +13,7 @@ const Tube = ({ colors, colorMap, active }) => {
         width: '40px',
         height: '140px',
         display: 'flex',
-        flexDirection: 'column-reverse', // Stack from bottom
+        flexDirection: 'column-reverse',
         overflow: 'hidden',
         margin: '10px',
         backgroundColor: '#222'
