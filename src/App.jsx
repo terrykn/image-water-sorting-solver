@@ -71,15 +71,22 @@ function App() {
         </button>
       </div>
 
-      <div className="game-board">
+      {/* --- UPDATED STYLE INLINE FOR GRID --- */}
+      <div className="game-board" style={{ 
+        display: 'grid', 
+        gridTemplateColumns: 'repeat(4, 1fr)', 
+        gap: '20px',
+        maxWidth: '600px',
+        margin: '0 auto'
+      }}>
         {displayedTubes.map((tubeColors, idx) => (
-          <div key={idx} className="tube-wrapper">
+          <div key={idx} className="tube-wrapper" style={{ textAlign: 'center' }}>
              <Tube 
                 colors={tubeColors} 
                 colorMap={level?.colorMap || []}
                 active={solution && solution[currentStep] && (solution[currentStep].from === idx || solution[currentStep].to === idx)}
              />
-             <span className="tube-label">{idx}</span>
+             <div className="tube-label" style={{ marginTop: '5px', fontWeight: 'bold' }}>{idx}</div>
           </div>
         ))}
       </div>
@@ -87,12 +94,12 @@ function App() {
       {solution && (
         <div className="player-controls">
            <button onClick={() => setCurrentStep(Math.max(0, currentStep - 1))}>Prev</button>
-           <span>Step {currentStep} / {solution.length}</span>
+           <span style={{ margin: '0 15px' }}>Step {currentStep} / {solution.length}</span>
            <button onClick={() => setCurrentStep(Math.min(solution.length, currentStep + 1))}>Next</button>
            
            {currentStep < solution.length && (
-             <div className="instruction">
-               Move from <b>Tube {solution[currentStep].from}</b> to <b>Tube {solution[currentStep].to}</b>
+             <div className="instruction" style={{ marginTop: '20px', fontSize: '1.2em' }}>
+                Move from <b style={{color: '#ff4d4d'}}>Tube {solution[currentStep].from}</b> to <b style={{color: '#4da6ff'}}>Tube {solution[currentStep].to}</b>
              </div>
            )}
         </div>
