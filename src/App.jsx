@@ -86,7 +86,7 @@ function App() {
                 colorMap={level?.colorMap || []}
                 active={solution && solution[currentStep] && (solution[currentStep].from === idx || solution[currentStep].to === idx)}
              />
-             <div className="tube-label" style={{ marginTop: '5px', fontWeight: 'bold' }}>{idx}</div>
+             <div className="tube-label" style={{ marginTop: '5px', fontWeight: 'bold' }}>{idx + 1}</div>
           </div>
         ))}
       </div>
