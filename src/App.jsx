@@ -9,13 +9,15 @@ function App() {
   const [solution, setSolution] = useState(null);
   const [currentStep, setCurrentStep] = useState(0);
   const [status, setStatus] = useState('idle');
+  
+  // NEW: State to track if we are using 3 or 4 columns
+  const [numColumns, setNumColumns] = useState(4);
 
   const handleSolve = (initialLevel) => {
     const levelToSolve = initialLevel || level;
     if (!levelToSolve) return;
     setStatus('solving');
 
-    // Introduce a slight delay to allow the 'solving' status to display
     setTimeout(() => {
       const result = solveLevel(levelToSolve.tubes);
       if (result.success) {
@@ -28,21 +30,20 @@ function App() {
     }, 100);
   };
 
-  // 1. Update handleImageUpload to call handleSolve immediately
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
     setStatus('scanning');
     try {
-      const result = await scanImage(file);
+      // NEW: Pass the selected numColumns to the scanner
+      const result = await scanImage(file, numColumns);
+      
       setLevel(result);
       setSolution(null);
       setCurrentStep(0);
       setStatus('ready');
       
-      // Immediately trigger solve after setting the level state
-      // Pass the result directly to ensure we use the new state
       handleSolve(result); 
 
     } catch (err) {
@@ -52,11 +53,9 @@ function App() {
     }
   };
 
-  // 2. New function to copy the steps
   const handleCopySteps = () => {
     if (!solution || solution.length === 0) return;
 
-    // Format steps as "1->2\n3->4\n..."
     const stepsText = solution
       .map((step, idx) => `${idx + 1}. ${step.from + 1}->${step.to + 1}`)
       .join('\n');
@@ -92,8 +91,30 @@ function App() {
       <h1>Water Sort Solver</h1>
       
       <div className="controls">
+        {/* NEW: Column Selector */}
+        <div style={{ marginBottom: '15px', display: 'flex', gap: '20px', justifyContent: 'center' }}>
+          <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <input 
+              type="radio" 
+              name="cols" 
+              checked={numColumns === 4} 
+              onChange={() => setNumColumns(4)} 
+            /> 
+            <strong>4 Columns</strong> (Standard)
+          </label>
+          <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <input 
+              type="radio" 
+              name="cols" 
+              checked={numColumns === 3} 
+              onChange={() => setNumColumns(3)} 
+            /> 
+            <strong>3 Columns</strong> (Small)
+          </label>
+        </div>
+
         <input type="file" accept="image/*" onChange={handleImageUpload} />
-        {/* The 'Solve Level' button is now less necessary since solving is automatic, but we keep the logic just in case */}
+        
         <button disabled={!level || status !== 'ready' || solution} onClick={() => handleSolve()}> 
           {status === 'solving' ? 'Solving...' : 'Solve Level'}
         </button>
@@ -102,7 +123,6 @@ function App() {
       {solution && (
         <div>
           <h3 style={{marginTop: 0}}>Steps ({solution.length}):</h3>
-          {/* 3. Add the Copy Steps button here */}
           <button 
             onClick={handleCopySteps} 
             style={{ marginBottom: '10px', padding: '10px 15px', cursor: 'pointer' }}
@@ -116,7 +136,6 @@ function App() {
           }}>
             {solution.map((step, idx) => (
               <div key={idx}>
-                {/* Adding 1 to indices to match human-readable tube labels */}
                 <strong>{idx+1}. {step.from + 1}&rarr;{step.to + 1}</strong>
               </div>
             ))}
@@ -124,10 +143,10 @@ function App() {
         </div>
       )}
 
-      {/* --- Rest of the component remains the same --- */}
+      {/* Grid adapts to column selection */}
       <div className="game-board" style={{ 
         display: 'grid', 
-        gridTemplateColumns: 'repeat(4, 1fr)', 
+        gridTemplateColumns: `repeat(${numColumns}, 1fr)`, 
         gap: '20px',
         maxWidth: '600px',
         margin: '0 auto'

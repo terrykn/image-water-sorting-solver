@@ -1,7 +1,11 @@
 /* ------------------------------------------------------
    CONFIGURATION: HARDCODED POSITIONS
    ------------------------------------------------------ */
-const COLS_X = [170, 444, 726, 1003];
+// Standard 4-column layout
+const COLS_X_4 = [170, 444, 726, 1003];
+
+// New 3-column layout (for <= 9 tubes)
+const COLS_X_3 = [255, 583, 916];
 
 // Index 0: Row 3 (Visual Top) - 635
 // Index 1: Row 2 (Visual Mid) - 1125
@@ -65,7 +69,8 @@ class TubeLocation {
     }
 }
 
-export const scanImage = (file) => {
+// Updated to accept columnCount
+export const scanImage = (file, columnCount = 4) => {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.src = URL.createObjectURL(file);
@@ -82,10 +87,15 @@ export const scanImage = (file) => {
       const w = canvas.width;
       const detectedTubes = [];
 
+      // Select the correct X coordinates based on user input
+      const activeColsX = columnCount === 3 ? COLS_X_3 : COLS_X_4;
+
       for (let r = 0; r < ROWS_Y.length; r++) {
         const rowY = ROWS_Y[r];
-        for (let c = 0; c < COLS_X.length; c++) {
-          const colX = COLS_X[c];
+        
+        // Loop through the selected columns array
+        for (let c = 0; c < activeColsX.length; c++) {
+          const colX = activeColsX[c];
           const tubeColors = [];
 
           for (let s = 0; s < SLOT_OFFSETS.length; s++) {
@@ -106,10 +116,9 @@ export const scanImage = (file) => {
       }
 
       // --- UPDATED SORTING ---
-      // Requirement: Index 0 starts at Top-Left, then right, then down.
       detectedTubes.sort((a, b) => {
         // 1. Sort by Y ASCENDING (Top rows first)
-        if (Math.abs(a.y - b.y) > 10) { // Using a threshold for slight y-variations
+        if (Math.abs(a.y - b.y) > 10) { 
           return a.y - b.y; 
         }
         // 2. Sort by X ASCENDING (Left to Right)
