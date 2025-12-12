@@ -10,6 +10,25 @@ function App() {
   const [currentStep, setCurrentStep] = useState(0);
   const [status, setStatus] = useState('idle');
 
+  const handleSolve = (initialLevel) => {
+    const levelToSolve = initialLevel || level;
+    if (!levelToSolve) return;
+    setStatus('solving');
+
+    // Introduce a slight delay to allow the 'solving' status to display
+    setTimeout(() => {
+      const result = solveLevel(levelToSolve.tubes);
+      if (result.success) {
+        setSolution(result.steps);
+        setCurrentStep(0);
+      } else {
+        alert("No solution found!");
+      }
+      setStatus('ready');
+    }, 100);
+  };
+
+  // 1. Update handleImageUpload to call handleSolve immediately
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -21,6 +40,11 @@ function App() {
       setSolution(null);
       setCurrentStep(0);
       setStatus('ready');
+      
+      // Immediately trigger solve after setting the level state
+      // Pass the result directly to ensure we use the new state
+      handleSolve(result); 
+
     } catch (err) {
       console.error(err);
       alert("Failed to scan image");
@@ -28,20 +52,23 @@ function App() {
     }
   };
 
-  const handleSolve = () => {
-    if (!level) return;
-    setStatus('solving');
-    
-    setTimeout(() => {
-      const result = solveLevel(level.tubes);
-      if (result.success) {
-        setSolution(result.steps);
-        setCurrentStep(0);
-      } else {
-        alert("No solution found!");
-      }
-      setStatus('ready');
-    }, 100);
+  // 2. New function to copy the steps
+  const handleCopySteps = () => {
+    if (!solution || solution.length === 0) return;
+
+    // Format steps as "1->2\n3->4\n..."
+    const stepsText = solution
+      .map((step, idx) => `${idx + 1}. ${step.from + 1}->${step.to + 1}`)
+      .join('\n');
+
+    navigator.clipboard.writeText(stepsText)
+      .then(() => {
+        alert("Steps copied to clipboard!");
+      })
+      .catch(err => {
+        console.error('Could not copy text: ', err);
+        alert("Failed to copy steps.");
+      });
   };
 
   const getCurrentState = () => {
@@ -66,12 +93,38 @@ function App() {
       
       <div className="controls">
         <input type="file" accept="image/*" onChange={handleImageUpload} />
-        <button disabled={!level || status !== 'ready'} onClick={handleSolve}>
+        {/* The 'Solve Level' button is now less necessary since solving is automatic, but we keep the logic just in case */}
+        <button disabled={!level || status !== 'ready' || solution} onClick={() => handleSolve()}> 
           {status === 'solving' ? 'Solving...' : 'Solve Level'}
         </button>
       </div>
 
-      {/* --- UPDATED STYLE INLINE FOR GRID --- */}
+      {solution && (
+        <div>
+          <h3 style={{marginTop: 0}}>Steps ({solution.length}):</h3>
+          {/* 3. Add the Copy Steps button here */}
+          <button 
+            onClick={handleCopySteps} 
+            style={{ marginBottom: '10px', padding: '10px 15px', cursor: 'pointer' }}
+          >
+            📋 Copy Steps
+          </button>
+          <div style={{ 
+            fontSize: '1.2rem', 
+            lineHeight: '1.8',
+            fontFamily: 'monospace'
+          }}>
+            {solution.map((step, idx) => (
+              <div key={idx}>
+                {/* Adding 1 to indices to match human-readable tube labels */}
+                <strong>{idx+1}. {step.from + 1}&rarr;{step.to + 1}</strong>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* --- Rest of the component remains the same --- */}
       <div className="game-board" style={{ 
         display: 'grid', 
         gridTemplateColumns: 'repeat(4, 1fr)', 
@@ -99,7 +152,7 @@ function App() {
            
            {currentStep < solution.length && (
              <div className="instruction" style={{ marginTop: '20px', fontSize: '1.2em' }}>
-                Move from <b style={{color: '#ff4d4d'}}>Tube {solution[currentStep].from}</b> to <b style={{color: '#4da6ff'}}>Tube {solution[currentStep].to}</b>
+               Move from <b style={{color: '#ff4d4d'}}>Tube {solution[currentStep].from + 1}</b> to <b style={{color: '#4da6ff'}}>Tube {solution[currentStep].to + 1}</b>
              </div>
            )}
         </div>
